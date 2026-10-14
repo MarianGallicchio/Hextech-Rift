@@ -183,16 +183,15 @@ export const FriendlyScrimsPanel: React.FC<FriendlyScrimsPanelProps> = ({
                     {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
 
-                  <button
-                    onClick={() => {
-                      hextechAudio.playClick();
-                      window.location.href = scrim.riotLobbyCode;
-                    }}
+                  <a
+                    href={scrim.riotLobbyCode}
+                    onClick={() => hextechAudio.playClick()}
+                    title="Abrir código en el cliente de League of Legends"
                     className="px-2.5 py-1 rounded bg-[#0ac8b9] hover:bg-[#0fd9c9] text-black font-semibold text-[11px] font-mono flex items-center gap-1 cursor-pointer"
                   >
                     <ExternalLink className="w-3 h-3" />
                     <span>Abrir</span>
-                  </button>
+                  </a>
                 </div>
               </div>
 

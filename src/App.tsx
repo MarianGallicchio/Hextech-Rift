@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Player, Team, Tournament, Match, AppNotification, TournamentTier } from './types/tournament';
 import { INITIAL_PLAYER, INITIAL_TEAMS, INITIAL_TOURNAMENTS, INITIAL_NOTIFICATIONS } from './data/mockData';
+import { loadState, saveState } from './utils/storage';
+import { LandingSections } from './components/LandingSections';
 import { HeaderNav } from './components/HeaderNav';
 import { TournamentCard } from './components/TournamentCard';
 import { TournamentDetailModal } from './components/TournamentDetailModal';
@@ -14,16 +16,20 @@ import { CreateTournamentModal } from './components/CreateTournamentModal';
 import { FriendlyScrimsPanel } from './components/FriendlyScrimsPanel';
 import { AmateurLeagueCreatorModal } from './components/AmateurLeagueCreatorModal';
 import { ReferralProgramModal } from './components/ReferralProgramModal';
-import { AdvancedAnalyticsDashboard } from './components/AdvancedAnalyticsDashboard';
+// Code-split: d3 + recharts only load when the analytics tab opens.
+const AdvancedAnalyticsDashboard = lazy(() =>
+  import('./components/AdvancedAnalyticsDashboard').then((m) => ({ default: m.AdvancedAnalyticsDashboard }))
+);
 import { hextechAudio } from './utils/audio';
 import { getRankFromElo } from './utils/elo';
 import { Trophy, Shield, Plus, Sparkles, Filter, Search, DollarSign, Cpu, Calculator, Swords, Gift, BarChart3 } from 'lucide-react';
 
 export default function App() {
-  const [player, setPlayer] = useState<Player>(INITIAL_PLAYER);
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
-  const [tournaments, setTournaments] = useState<Tournament[]>(INITIAL_TOURNAMENTS);
-  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  // Persisted state: survives reloads (frontend-only until a backend exists).
+  const [player, setPlayer] = useState<Player>(() => loadState('player', INITIAL_PLAYER));
+  const [teams, setTeams] = useState<Team[]>(() => loadState('teams', INITIAL_TEAMS));
+  const [tournaments, setTournaments] = useState<Tournament[]>(() => loadState('tournaments', INITIAL_TOURNAMENTS));
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => loadState('notifications', INITIAL_NOTIFICATIONS));
 
   const [activeTab, setActiveTab] = useState<'tournaments' | 'team' | 'scrims' | 'elo' | 'analytics' | 'admin'>('tournaments');
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
@@ -35,7 +41,17 @@ export default function App() {
   const [isCreateTournamentOpen, setIsCreateTournamentOpen] = useState(false);
   const [isAmateurLeagueCreatorOpen, setIsAmateurLeagueCreatorOpen] = useState(false);
   const [isReferralOpen, setIsReferralOpen] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => loadState('soundEnabled', true));
+
+  // Persist on every change + keep the audio engine in sync with the toggle.
+  useEffect(() => { saveState('player', player); }, [player]);
+  useEffect(() => { saveState('teams', teams); }, [teams]);
+  useEffect(() => { saveState('tournaments', tournaments); }, [tournaments]);
+  useEffect(() => { saveState('notifications', notifications); }, [notifications]);
+  useEffect(() => {
+    hextechAudio.enabled = soundEnabled;
+    saveState('soundEnabled', soundEnabled);
+  }, [soundEnabled]);
 
   // Filters
   const [selectedTierFilter, setSelectedTierFilter] = useState<string>('ALL');
@@ -45,16 +61,29 @@ export default function App() {
   const userTeam = teams.find((t) => t.id === player.teamId) || null;
 
   // Handle Match Result Update from Admin or Live Lobby
+  // Idempotent: re-applying the same COMPLETED result never inflates standings.
   const handleUpdateMatch = (tournamentId: string, updatedMatch: Match) => {
     setTournaments((prev) =>
       prev.map((t) => {
         if (t.id !== tournamentId) return t;
 
+        const allOld = [
+          ...t.groups.flatMap((g) => g.matches),
+          ...t.playoffMatches
+        ];
+        const oldMatch = allOld.find((m) => m.id === updatedMatch.id);
+        const alreadyCounted =
+          oldMatch?.status === 'COMPLETED' &&
+          oldMatch.winnerId === updatedMatch.winnerId &&
+          updatedMatch.status === 'COMPLETED';
+
         // Update in group matches
         const updatedGroups = t.groups.map((g) => ({
           ...g,
           matches: g.matches.map((m) => (m.id === updatedMatch.id ? updatedMatch : m)),
-          teams: g.teams.map((teamEntry) => {
+          teams: alreadyCounted
+            ? g.teams
+            : g.teams.map((teamEntry) => {
             if (updatedMatch.status === 'COMPLETED') {
               if (teamEntry.id === updatedMatch.winnerId) {
                 return { ...teamEntry, wins: teamEntry.wins + 1, points: teamEntry.points + 3 };
@@ -88,12 +117,38 @@ export default function App() {
     }
   };
 
-  // Register user team to tournament
+  // Register user team to tournament (validated: status, duplicates, capacity).
   const handleRegisterTeam = (tournamentId: string, teamToRegister: Team) => {
+    const tournament = tournaments.find((t) => t.id === tournamentId);
+    if (!tournament) return;
+
+    const reject = (message: string) => {
+      const rejected: AppNotification = {
+        id: `notif_${Date.now()}`,
+        title: 'Inscripción rechazada',
+        message,
+        type: 'MATCH_ALERT',
+        timestamp: 'Ahora mismo',
+        read: false
+      };
+      setNotifications((prev) => [rejected, ...prev]);
+    };
+
+    if (tournament.status !== 'REGISTRATION') {
+      reject(`"${tournament.title}" ya cerró inscripciones (estado: ${tournament.status}).`);
+      return;
+    }
+    if (tournament.registeredTeams.some((r) => r.id === teamToRegister.id)) return;
+    if (tournament.registeredTeams.length >= tournament.maxTeams) {
+      reject(`"${tournament.title}" está completo (${tournament.maxTeams}/${tournament.maxTeams} equipos).`);
+      return;
+    }
+
     setTournaments((prev) =>
       prev.map((t) => {
         if (t.id !== tournamentId) return t;
         if (t.registeredTeams.some((r) => r.id === teamToRegister.id)) return t;
+        if (t.registeredTeams.length >= t.maxTeams) return t;
         return {
           ...t,
           registeredTeams: [...t.registeredTeams, teamToRegister]
@@ -115,16 +170,34 @@ export default function App() {
     hextechAudio.playNotification();
   };
 
-  // Create new team
+  // Create new team (tier derived from captain ELO, unique tag enforced).
   const handleCreateTeam = (name: string, tag: string) => {
+    const cleanTag = tag.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'HRX';
+    let finalTag = cleanTag;
+    let suffix = 2;
+    while (teams.some((t) => t.tag.toUpperCase() === finalTag)) {
+      finalTag = `${cleanTag.slice(0, 4)}${suffix}`;
+      suffix += 1;
+    }
+
+    const captainRank = getRankFromElo(player.eloRating).tier;
+    const divisionTier =
+      captainRank === 'MASTER' || captainRank === 'GRANDMASTER' || captainRank === 'CHALLENGER'
+        ? 'TIER_I'
+        : captainRank === 'EMERALD' || captainRank === 'DIAMOND'
+          ? 'TIER_II'
+          : captainRank === 'GOLD' || captainRank === 'PLATINUM'
+            ? 'TIER_III'
+            : 'TIER_IV';
+
     const newTeam: Team = {
       id: `team_${Date.now()}`,
-      name,
-      tag,
+      name: name.trim() || `Escuadra ${finalTag}`,
+      tag: finalTag,
       captainId: player.id,
       logoUrl: '',
-      divisionTier: 'TIER_II',
-      inviteCode: `${tag}-RFT-${Math.floor(100 + Math.random() * 900)}`,
+      divisionTier,
+      inviteCode: `${finalTag}-RFT-${Math.floor(100 + Math.random() * 900)}`,
       stats: {
         matchesPlayed: 0,
         wins: 0,
@@ -291,9 +364,9 @@ export default function App() {
                         hextechAudio.playClick();
                         setIsAmateurLeagueCreatorOpen(true);
                       }}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 text-white font-cinzel font-bold text-xs transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] cursor-pointer flex items-center gap-2"
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#c89b3c] to-[#785a28] hover:from-[#e0b04c] hover:to-[#8c6930] text-black font-cinzel font-bold text-xs transition-all shadow-[0_0_20px_rgba(200,155,60,0.3)] cursor-pointer flex items-center gap-2"
                     >
-                      <Calculator className="w-4 h-4 text-purple-200" />
+                      <Calculator className="w-4 h-4" />
                       <span>Crear Liga Amateur (Comisión)</span>
                     </button>
 
@@ -476,6 +549,7 @@ export default function App() {
                   <input
                     type="text"
                     placeholder="Buscar torneo..."
+                    aria-label="Buscar torneo"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-[#c89b3c]"
@@ -485,7 +559,7 @@ export default function App() {
             </div>
 
             {/* Tournaments Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div id="tournaments-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 scroll-mt-24">
               {filteredTournaments.map((tournament) => (
                 <TournamentCard
                   key={tournament.id}
@@ -497,6 +571,20 @@ export default function App() {
                 />
               ))}
             </div>
+
+            {/* Landing: cómo funciona, divisiones, FAQ y CTA final */}
+            <LandingSections
+              totalPrizePoolUSD={totalPrizePoolUSD}
+              teamsCount={teams.length}
+              tournamentsCount={tournaments.length}
+              onCreateTournament={() => setIsCreateTournamentOpen(true)}
+              onBrowseTournaments={() => {
+                setSearchQuery('');
+                setSelectedTierFilter('ALL');
+                setSelectedTypeFilter('ALL');
+                document.getElementById('tournaments-grid')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
 
             {/* Salón de Trofeos 3D & Premios Hextech (Awards Showcase) */}
             <div className="p-6 rounded-3xl hextech-card border border-[#c89b3c]/35 space-y-6">
@@ -526,8 +614,10 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#1a1c14] to-[#070e18] border-2 border-amber-400/60 hover:border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.15)] hover:shadow-[0_0_40px_rgba(251,191,36,0.3)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="images/hextech_trophy_first_1791934697118.jpg"
-                      alt="Trofeo Hextech Gran Campeón"
+                        src="images/hextech_trophy_first_1791934697118.jpg"
+                        alt="Trofeo Hextech Gran Campeón"
+                        loading="lazy"
+                        decoding="async"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
@@ -560,8 +650,10 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#0e1726] to-[#070e18] border border-cyan-400/40 hover:border-cyan-400 shadow-[0_0_25px_rgba(10,200,185,0.15)] hover:shadow-[0_0_35px_rgba(10,200,185,0.3)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="images/hextech_trophy_second_1791934697670.jpg"
-                      alt="Trofeo Hextech Subcampeón Plata Platino"
+                        src="images/hextech_trophy_second_1791934697670.jpg"
+                        alt="Trofeo Hextech Subcampeón Plata Platino"
+                        loading="lazy"
+                        decoding="async"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
@@ -594,8 +686,10 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#18110b] to-[#070e18] border border-amber-700/40 hover:border-amber-500 shadow-[0_0_25px_rgba(217,119,6,0.15)] hover:shadow-[0_0_35px_rgba(217,119,6,0.25)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="images/hextech_trophy_third_1791934697357.jpg"
-                      alt="Trofeo Hextech Bronce Tercer Lugar"
+                        src="images/hextech_trophy_third_1791934697357.jpg"
+                        alt="Trofeo Hextech Bronce Tercer Lugar"
+                        loading="lazy"
+                        decoding="async"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
@@ -658,7 +752,15 @@ export default function App() {
 
         {/* VIEW 5: ADVANCED D3 ANALYTICS DASHBOARD */}
         {activeTab === 'analytics' && (
-          <AdvancedAnalyticsDashboard />
+          <Suspense
+            fallback={
+              <div className="p-10 rounded-3xl hextech-card border border-slate-800 text-center text-xs font-mono text-slate-400">
+                Cargando analíticas Hextech…
+              </div>
+            }
+          >
+            <AdvancedAnalyticsDashboard />
+          </Suspense>
         )}
       </main>
 

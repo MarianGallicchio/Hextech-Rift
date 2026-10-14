@@ -54,6 +54,7 @@ export interface RiotVerificationResponse {
 
 class RiotApiService {
   private customApiKey: string = '';
+  private lastLiveLookup: boolean = false;
 
   public setApiKey(key: string) {
     this.customApiKey = key.trim();
@@ -65,6 +66,87 @@ class RiotApiService {
 
   public hasApiKey(): boolean {
     return this.customApiKey.length > 5;
+  }
+
+  /** True when the last summoner lookup hit the live Riot proxy. */
+  public wasLastLookupLive(): boolean {
+    return this.lastLiveLookup;
+  }
+
+  private proxyBase(): string {
+    const base = (import.meta.env.VITE_RIOT_PROXY_URL as string | undefined || '').trim();
+    return base.replace(/\/+$/, '');
+  }
+
+  /**
+   * Live lookup via the local proxy (server/riot-proxy.mjs).
+   * Returns null when the proxy is offline/unreachable so callers can
+   * fall back to the high-fidelity simulator.
+   */
+  private async fetchSummonerLive(
+    gameName: string,
+    tagLine: string,
+    region: ServerRegion
+  ): Promise<{
+    account: RiotAccountDto;
+    summoner: RiotSummonerDto;
+    rankEntry: RiotLeagueEntryDto;
+  } | null> {
+    const base = this.proxyBase();
+    if (!base) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const url =
+        `${base}/api/riot/summoner?gameName=${encodeURIComponent(gameName)}` +
+        `&tagLine=${encodeURIComponent(tagLine)}&region=${encodeURIComponent(region)}`;
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) return null;
+      const live = await res.json();
+      if (!live || !live.puuid) return null;
+      return {
+        account: { puuid: live.puuid, gameName: live.gameName, tagLine: live.tagLine },
+        summoner: {
+          id: `sum_${live.puuid.slice(0, 8)}`,
+          accountId: `acc_${live.puuid.slice(0, 8)}`,
+          puuid: live.puuid,
+          profileIconId: live.profileIconId ?? 29,
+          revisionDate: Date.now(),
+          summonerLevel: live.summonerLevel ?? 0
+        },
+        rankEntry: live.rank
+          ? {
+              leagueId: `${live.rank.queueType}`,
+              queueType: live.rank.queueType === 'RANKED_FLEX_SR' ? 'RANKED_FLEX_SR' : 'RANKED_SOLO_5x5',
+              tier: live.rank.tier,
+              rank: live.rank.rank,
+              leaguePoints: live.rank.leaguePoints,
+              wins: live.rank.wins,
+              losses: live.rank.losses,
+              veteran: false,
+              inactive: false,
+              freshBlood: false,
+              hotStreak: false
+            }
+          : {
+              leagueId: 'UNRANKED',
+              queueType: 'RANKED_SOLO_5x5',
+              tier: 'UNRANKED',
+              rank: '',
+              leaguePoints: 0,
+              wins: 0,
+              losses: 0,
+              veteran: false,
+              inactive: false,
+              freshBlood: false,
+              hotStreak: false
+            }
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -82,14 +164,20 @@ class RiotApiService {
   }
 
   /**
-   * Fetch live summoner data either through real Riot API (if key provided)
-   * or high-fidelity simulated response matching Riot's official JSON contracts.
+   * Fetch live summoner data either through the local Riot proxy
+   * (server/riot-proxy.mjs, real Riot Games API) or — when the proxy is
+   * offline — a high-fidelity simulated response matching Riot's official
+   * JSON contracts.
    */
   public async fetchSummonerData(gameName: string, tagLine: string, region: ServerRegion): Promise<{
     account: RiotAccountDto;
     summoner: RiotSummonerDto;
     rankEntry: RiotLeagueEntryDto;
   }> {
+    const live = await this.fetchSummonerLive(gameName, tagLine, region);
+    this.lastLiveLookup = live !== null;
+    if (live) return live;
+
     // If real API key is present and CORS permits, we could fetch, but Riot API restricts browser CORS for production keys.
     // Therefore we simulate with 100% faithful Riot JSON structure or proxy if needed.
     await new Promise((res) => setTimeout(res, 600));

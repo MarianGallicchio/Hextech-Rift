@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Player, ServerRegion, RankTier, DivisionNumber, LaneRole } from '../types/tournament';
 import { LOL_CHAMPIONS, RANK_TIERS_INFO, LANE_ROLES_INFO } from '../data/champions';
-import { X, Check, Shield, Flame, User, Search, Award, TrendingUp, Settings } from 'lucide-react';
+import { X, Check, Shield, Flame, User, Search, Award, TrendingUp, Settings, BadgeCheck, Loader2 } from 'lucide-react';
 import { hextechAudio } from '../utils/audio';
+import { ELO_TIERS } from '../utils/elo';
+import { riotApi } from '../services/riotApi';
 import { RiotPerformanceChart } from './RiotPerformanceChart';
 
 interface ParticipantProfileModalProps {
@@ -26,6 +28,8 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
   const [secondaryRole, setSecondaryRole] = useState<LaneRole>(player.secondaryRole);
   const [selectedChampSearch, setSelectedChampSearch] = useState('');
   const [selectedMainChamps, setSelectedMainChamps] = useState(player.mainChampions);
+  const [verifyState, setVerifyState] = useState<'idle' | 'checking' | 'live' | 'sim'>('idle');
+  const [verifyMsg, setVerifyMsg] = useState('');
 
   // Close on Escape key
   useEffect(() => {
@@ -79,6 +83,42 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
     }
   };
 
+  const handleVerifyRiot = async () => {
+    if (!summonerName.trim() || !tagLine.trim()) {
+      setVerifyState('sim');
+      setVerifyMsg('Escribe tu Riot ID y tag primero.');
+      return;
+    }
+    setVerifyState('checking');
+    setVerifyMsg('Consultando Riot Games…');
+    hextechAudio.playClick();
+    try {
+      const data = await riotApi.fetchSummonerData(summonerName.trim(), tagLine.trim(), server);
+      if (riotApi.wasLastLookupLive()) {
+        const entry = data.rankEntry;
+        if ((rankTiers as string[]).includes(entry.tier) && entry.tier !== 'UNRANKED') {
+          setRankTier(entry.tier as RankTier);
+          if ((divisions as string[]).includes(entry.rank)) {
+            setDivision(entry.rank as DivisionNumber);
+          }
+        }
+        setVerifyState('live');
+        setVerifyMsg(
+          entry.tier === 'UNRANKED'
+            ? `Cuenta encontrada (nivel ${data.summoner.summonerLevel}) · sin rango en SoloQ esta temporada.`
+            : `Verificado en vivo: ${entry.tier} ${entry.rank} · ${entry.leaguePoints} LP · ${entry.wins}V/${entry.losses}D.`
+        );
+        hextechAudio.playVictory();
+      } else {
+        setVerifyState('sim');
+        setVerifyMsg('Proxy Riot no disponible (corre `npm run proxy`). Se usó el simulador.');
+      }
+    } catch {
+      setVerifyState('sim');
+      setVerifyMsg('No se pudo verificar. Revisa el Riot ID o el estado del proxy.');
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     hextechAudio.playVictory();
@@ -88,6 +128,12 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
       ? LOL_CHAMPIONS.find((c) => c.id === selectedFirstChamp.championId)?.avatar || player.avatarUrl
       : player.avatarUrl;
 
+    // Rank and ELO stay consistent: manual rank picks snap ELO to that bracket.
+    const bracket =
+      ELO_TIERS.find((b) => b.tier === rankTier && b.division === division) ??
+      ELO_TIERS.find((b) => b.tier === rankTier);
+    const derivedElo = bracket ? Math.round((bracket.minElo + bracket.maxElo) / 2) : player.eloRating;
+
     const updated: Player = {
       ...player,
       summonerName: summonerName.trim() || player.summonerName,
@@ -95,6 +141,8 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
       server,
       rankTier,
       division,
+      eloRating: derivedElo,
+      seasonPeakElo: Math.max(player.seasonPeakElo, derivedElo),
       primaryRole,
       secondaryRole,
       mainChampions: selectedMainChamps,
@@ -228,6 +276,26 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
                 className="w-full px-3 py-2 rounded-lg bg-black/60 border border-slate-700 text-[#f0e6d2] focus:border-[#c89b3c] focus:outline-none text-sm font-mono"
               />
             </div>
+          </div>
+
+          {/* Riot live verification */}
+          <div className="p-3 rounded-xl bg-black/50 border border-[#0ac8b9]/30 flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={handleVerifyRiot}
+              disabled={verifyState === 'checking'}
+              className="px-4 py-2 rounded-lg bg-[#0ac8b9]/15 border border-[#0ac8b9]/50 hover:border-[#0ac8b9] text-[#0ac8b9] text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-2 shrink-0 disabled:opacity-60"
+            >
+              {verifyState === 'checking'
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <BadgeCheck className="w-3.5 h-3.5" />}
+              <span>{verifyState === 'checking' ? 'Verificando…' : 'Verificar con Riot'}</span>
+            </button>
+            <p className={`text-[11px] font-mono leading-relaxed ${
+              verifyState === 'live' ? 'text-emerald-300' : verifyState === 'sim' ? 'text-amber-300' : 'text-slate-400'
+            }`}>
+              {verifyMsg || 'Conecta tu Riot ID real: autocompleta rango y división desde la API oficial (requiere `npm run proxy`).'}
+            </p>
           </div>
 
           {/* Server & Rank */}

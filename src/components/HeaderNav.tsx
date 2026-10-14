@@ -172,6 +172,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           <button
             onClick={toggleSound}
             title={soundEnabled ? 'Silenciar sonidos Hextech' : 'Activar efectos'}
+            aria-label={soundEnabled ? 'Silenciar sonidos Hextech' : 'Activar efectos de sonido'}
+            aria-pressed={soundEnabled}
             className="p-2 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-400 hover:text-[#f0e6d2] hover:border-[#c89b3c]/40 transition-colors cursor-pointer"
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-[#0ac8b9]" /> : <VolumeX className="w-4 h-4" />}
@@ -185,6 +187,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             }}
             className="relative p-2 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-300 hover:text-[#f0e6d2] hover:border-[#c89b3c]/40 transition-colors cursor-pointer"
             title="Centro de Notificaciones y Avisos de Partida"
+            aria-label={`Centro de notificaciones, ${unreadCount} sin leer`}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
@@ -202,6 +205,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             }}
             className="flex items-center gap-2.5 sm:gap-3 pl-1.5 sm:pl-2 pr-2.5 sm:pr-3 py-1.5 rounded-xl bg-gradient-to-r from-[#091428] to-[#101e33] border border-[#c89b3c]/35 hover:border-[#c89b3c] hover:shadow-[0_0_20px_rgba(200,155,60,0.25)] transition-all cursor-pointer text-left"
             title="Ver perfil de invocador y estadísticas Riot API"
+            aria-label={`Ver perfil de ${player.summonerName}`}
           >
             <div className="relative w-8 h-8 rounded-full border-2 border-[#c89b3c] overflow-hidden shrink-0 shadow-[0_0_10px_rgba(200,155,60,0.4)]">
               <img
@@ -235,6 +239,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               setMobileMenuOpen(!mobileMenuOpen);
             }}
             className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 lg:hidden cursor-pointer"
+            aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>

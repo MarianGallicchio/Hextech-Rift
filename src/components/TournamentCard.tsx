@@ -33,9 +33,19 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Ver torneo ${tournament.title}`}
       onClick={() => {
         hextechAudio.playClick();
         onSelect(tournament);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          hextechAudio.playClick();
+          onSelect(tournament);
+        }
       }}
       className="group relative rounded-2xl hextech-card overflow-hidden border border-[#c89b3c]/25 hover:border-[#c89b3c]/80 transition-all duration-300 cursor-pointer flex flex-col justify-between"
     >
@@ -44,6 +54,8 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         <img
           src={tournament.bannerImage}
           alt={tournament.title}
+          loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           referrerPolicy="no-referrer"
         />
@@ -96,7 +108,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
       {/* Content Body */}
       <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
         <div>
-          <h3 className="text-lg font-cinzel font-bold text-[#f0e6d2] group-hover:text-[#c89b3c] transition-colors line-clamp-1">
+          <h3 className="text-lg font-cinzel font-bold text-[#f0e6d2] group-hover:text-[#c89b3c] transition-colors line-clamp-2">
             {tournament.title}
           </h3>
           <p className="mt-1.5 text-xs text-slate-400 line-clamp-2 leading-relaxed">

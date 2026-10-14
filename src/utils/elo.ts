@@ -118,7 +118,8 @@ export function calculateEloDelta(
 
 /**
  * Season Soft-Reset Formula (Calculates new starting ELO for the new season)
- * soft-reset: 0.5 * oldElo + 0.5 * 1500 (uncompressed toward the center)
+ * soft-reset: 0.55 * oldElo + 0.45 * 1500 (slightly favors proven veterans
+ * over a pure 50/50 compression toward the center)
  */
 export function calculateSeasonResetElo(currentElo: number): { newElo: number; previousTier: string; newRank: ReturnType<typeof getRankFromElo> } {
   const previousTier = getRankFromElo(currentElo).name;

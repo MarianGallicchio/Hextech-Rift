@@ -53,6 +53,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Detalle del torneo ${tournament.title}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           hextechAudio.playClick();
@@ -82,6 +85,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
               onClose();
             }}
             className="absolute top-4 right-4 p-2 rounded-xl bg-black/60 text-slate-300 hover:text-white hover:bg-black/90 transition-all cursor-pointer z-10"
+            aria-label="Cerrar detalle del torneo"
           >
             <X className="w-5 h-5" />
           </button>
@@ -152,7 +156,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="px-6 border-b border-slate-800 bg-[#070e1a] flex items-center gap-6 shrink-0 text-xs font-medium">
+        <div role="tablist" aria-label="Secciones del torneo" className="px-6 border-b border-slate-800 bg-[#070e1a] flex items-center gap-6 shrink-0 text-xs font-medium overflow-x-auto">
           <button
             onClick={() => {
               hextechAudio.playClick();
@@ -225,6 +229,8 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     <img
                       src="images/hextech_trophy_first_1791934697118.jpg"
                       alt="Trofeo 1º Puesto Hextech Grand Championship"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
@@ -247,16 +253,18 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 </div>
 
                 {/* 2nd Place */}
-                <div className="relative rounded-2xl bg-slate-900/90 border border-slate-700 shadow-[0_0_20px_rgba(10,200,185,0.15)] overflow-hidden flex flex-col justify-between">
+                <div className="relative rounded-2xl bg-gradient-to-b from-[#0e1726] to-[#070e18] border border-cyan-400/40 hover:border-cyan-400 shadow-[0_0_20px_rgba(10,200,185,0.15)] overflow-hidden flex flex-col justify-between">
                   <div className="relative h-48 w-full bg-black/60 overflow-hidden">
                     <img
                       src="images/hextech_trophy_second_1791934697670.jpg"
                       alt="Trofeo 2º Puesto Hextech Runner-Up"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#091428] via-transparent to-transparent" />
-                    <span className="absolute top-3 left-3 text-[10px] font-mono uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-slate-400/30 text-slate-200 border border-slate-400/50 backdrop-blur-md">
+                    <span className="absolute top-3 left-3 text-[10px] font-mono uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-cyan-400/20 text-cyan-300 border border-cyan-400/50 backdrop-blur-md">
                       2º PUESTO · SUBCAMPEÓN
                     </span>
                   </div>
@@ -279,6 +287,8 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     <img
                       src="images/hextech_trophy_third_1791934697357.jpg"
                       alt="Trofeo 3º Puesto Hextech Bronze"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />

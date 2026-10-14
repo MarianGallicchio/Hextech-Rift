@@ -147,7 +147,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-slate-300 uppercase tracking-wider mb-1">
                 División Escalonada ELO
@@ -178,7 +178,25 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <option value="LAN">LAN</option>
                 <option value="NA">NA</option>
                 <option value="EUW">EUW</option>
+                <option value="EUNE">EUNE</option>
                 <option value="BR">BR</option>
+                <option value="KR">KR</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 uppercase tracking-wider mb-1">
+                Cupo Máximo de Equipos
+              </label>
+              <select
+                value={maxTeams}
+                onChange={(e) => setMaxTeams(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg bg-black/60 border border-slate-700 text-[#f0e6d2] focus:border-[#c89b3c] focus:outline-none cursor-pointer"
+              >
+                <option value={4}>4 equipos (Copa relámpago)</option>
+                <option value={8}>8 equipos (Estándar)</option>
+                <option value={16}>16 equipos (Major)</option>
+                <option value={32}>32 equipos (Circuito)</option>
               </select>
             </div>
 
