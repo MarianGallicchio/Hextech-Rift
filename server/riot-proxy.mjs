@@ -58,6 +58,7 @@ async function riotFetch(url) {
 }
 
 const app = express();
+app.use(express.json({ limit: '64kb' }));
 
 // Minimal CORS (no extra dependency): allow the Vite dev server + Pages.
 app.use((req, res, next) => {
@@ -120,6 +121,133 @@ app.get('/api/riot/summoner', async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Proxy error.' });
+  }
+});
+
+// ---- Tournament API (tournament-v4, platform-routed) ----
+// All three steps needed for a REAL, client-redeemable tournament code:
+// provider -> tournament -> codes. Bodies mirror Riot's contracts.
+
+async function tournamentPost(platform, path, body, query = '') {
+  const res = await fetch(`https://${platform}.api.riotgames.com${path}${query}`, {
+    method: 'POST',
+    headers: { 'X-Riot-Token': API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  const text = await res.text();
+  let parsed = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+  if (!res.ok) {
+    const e = new Error(
+      (parsed && (parsed.status?.message || parsed.message)) || `Tournament API error ${res.status}`
+    );
+    e.status = res.status;
+    e.payload = parsed;
+    throw e;
+  }
+  return parsed;
+}
+
+// ---- Tournament STUB API (works with development keys) ----
+// Same flow as tournament-v4 but against /lol/tournament-stub/v4/*.
+// Stub codes open REAL lobbies in the LoL client for testing.
+
+async function stubPost(platform, path, body, query = '') {
+  return tournamentPost(platform, `/lol/tournament-stub${path}`, body, query);
+}
+
+// POST /api/riot/stub-setup { region?, name?, count? } — full flow in one call.
+app.post('/api/riot/stub-setup', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const region = String(req.body.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const name = String(req.body.name || 'Hextech Rift Test').slice(0, 80);
+    const count = Math.min(Math.max(Number(req.body.count || 1), 1), 100);
+
+    const providerId = await stubPost(platform, '/v4/providers', {
+      region,
+      url: 'https://mariangallicchio.github.io/Hextech-Rift/api/tournament-callback'
+    });
+    const tournamentId = await stubPost(platform, '/v4/tournaments', { providerId, name });
+    const codes = await stubPost(
+      platform,
+      '/v4/codes',
+      {
+        mapType: 'SUMMONERS_RIFT',
+        metadata: `Hextech Rift test — ${name}`,
+        pickType: 'TOURNAMENT_DRAFT',
+        spectatorType: 'ALL',
+        teamSize: 5
+      },
+      `?tournamentId=${tournamentId}&count=${count}`
+    );
+    res.json({ providerId, tournamentId, codes, region, platform, stub: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, payload: err.payload || null });
+  }
+});
+app.post('/api/riot/provider', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const region = String(req.body.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const callbackUrl = String(
+      req.body.callbackUrl || 'https://mariangallicchio.github.io/Hextech-Rift/api/tournament-callback'
+    );
+    const providerId = await tournamentPost(platform, '/lol/tournament/v4/providers', {
+      region,
+      url: callbackUrl
+    });
+    res.json({ providerId, region, platform });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, payload: err.payload || null });
+  }
+});
+
+// POST /api/riot/tournament { providerId, name }
+app.post('/api/riot/tournament', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const providerId = Number(req.body.providerId);
+    const name = String(req.body.name || 'Hextech Rift Test').slice(0, 80);
+    if (!providerId) return res.status(400).json({ error: 'providerId is required.' });
+    const region = String(req.body.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const tournamentId = await tournamentPost(platform, '/lol/tournament/v4/tournaments', {
+      providerId,
+      name
+    });
+    res.json({ tournamentId, providerId, name });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, payload: err.payload || null });
+  }
+});
+
+// POST /api/riot/codes { tournamentId, count?, mapType?, pickType?, spectatorType?, teamSize?, region? }
+app.post('/api/riot/codes', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const tournamentId = Number(req.body.tournamentId);
+    if (!tournamentId) return res.status(400).json({ error: 'tournamentId is required.' });
+    const count = Math.min(Math.max(Number(req.body.count || 1), 1), 1000);
+    const region = String(req.body.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const codes = await tournamentPost(
+      platform,
+      '/lol/tournament/v4/codes',
+      {
+        mapType: req.body.mapType || 'SUMMONERS_RIFT',
+        metadata: String(req.body.metadata || 'Hextech Rift test match'),
+        pickType: req.body.pickType || 'TOURNAMENT_DRAFT',
+        spectatorType: req.body.spectatorType || 'ALL',
+        teamSize: Number(req.body.teamSize || 5)
+      },
+      `?tournamentId=${tournamentId}&count=${count}`
+    );
+    res.json({ codes, tournamentId });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, payload: err.payload || null });
   }
 });
 

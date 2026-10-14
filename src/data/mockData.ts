@@ -618,6 +618,39 @@ export const INITIAL_TOURNAMENTS: Tournament[] = [
     ],
     groups: [],
     playoffMatches: []
+  },
+  {
+    id: 'trn_sandbox_prueba_las',
+    title: '🧪 Sala de Pruebas · Código Real (LAS)',
+    description: 'Torneo sandbox para probar el flujo completo: inscripción → código de torneo Riot → sala en el cliente de LoL → verificación. El código real se genera con UNA key de producción vía el proxy (`POST /api/riot/setup`) y reemplaza al marcador de abajo.',
+    bannerImage: 'images/lol_champion_arena_1791934070563.jpg',
+    tier: 'TIER_OPEN',
+    entryType: 'FREE',
+    entryFeeUSD: 0,
+    prizePoolUSD: 0,
+    prizeDistribution: {
+      firstPlace: 0,
+      secondPlace: 0,
+      thirdPlace: 0,
+      rpBonus: 1000
+    },
+    server: 'LAS',
+    format: 'ELIMINACION_DIRECTA',
+    maxTeams: 4,
+    registeredTeams: [],
+    status: 'REGISTRATION',
+    startDate: 'Cuando quieras · sala siempre abierta',
+    riotLobbyCodeTemplate: 'PENDIENTE-KEY-PRODUCCION (ver reglas)',
+    autoVerifyEnabled: true,
+    rules: [
+      '1) Conseguí una production key en developer.riotgames.com (la dev key actual devuelve 403 en torneos).',
+      '2) Ponela en .env como RIOT_API_KEY y corre `npm run proxy`.',
+      '3) Generá el código: POST localhost:4000/api/riot/setup { region: "LAS", name: "Sala de Pruebas", count: 1 }.',
+      '4) Pegá el código devuelto en este torneo y canjealo en el cliente: Jugar → Personalizada → Código de torneo.',
+      'Mientras tanto podés probar todo el flujo (inscripción, bracket, notificaciones) con el simulador integrado.'
+    ],
+    groups: [],
+    playoffMatches: []
   }
 ];
 
