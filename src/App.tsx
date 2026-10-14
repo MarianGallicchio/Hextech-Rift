@@ -247,7 +247,7 @@ export default function App() {
             <div className="relative rounded-3xl overflow-hidden border border-[#c89b3c]/30 shadow-[0_0_40px_rgba(0,0,0,0.8)]">
               <div className="relative h-72 sm:h-80 w-full overflow-hidden">
                 <img
-                  src="/src/assets/images/lol_hextech_banner_1791934069499.jpg"
+                  src="images/lol_hextech_banner_1791934069499.jpg"
                   alt="Hextech Arena League of Legends"
                   className="w-full h-full object-cover brightness-95"
                   referrerPolicy="no-referrer"
@@ -526,7 +526,7 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#1a1c14] to-[#070e18] border-2 border-amber-400/60 hover:border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.15)] hover:shadow-[0_0_40px_rgba(251,191,36,0.3)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_first_1791934697118.jpg"
+                      src="images/hextech_trophy_first_1791934697118.jpg"
                       alt="Trofeo Hextech Gran Campeón"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
@@ -560,7 +560,7 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#0e1726] to-[#070e18] border border-cyan-400/40 hover:border-cyan-400 shadow-[0_0_25px_rgba(10,200,185,0.15)] hover:shadow-[0_0_35px_rgba(10,200,185,0.3)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_second_1791934697670.jpg"
+                      src="images/hextech_trophy_second_1791934697670.jpg"
                       alt="Trofeo Hextech Subcampeón Plata Platino"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
@@ -594,7 +594,7 @@ export default function App() {
                 <div className="group rounded-2xl bg-gradient-to-b from-[#18110b] to-[#070e18] border border-amber-700/40 hover:border-amber-500 shadow-[0_0_25px_rgba(217,119,6,0.15)] hover:shadow-[0_0_35px_rgba(217,119,6,0.25)] transition-all overflow-hidden flex flex-col justify-between">
                   <div className="relative h-64 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_third_1791934697357.jpg"
+                      src="images/hextech_trophy_third_1791934697357.jpg"
                       alt="Trofeo Hextech Bronce Tercer Lugar"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"

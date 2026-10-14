@@ -73,7 +73,7 @@ export const AmateurLeagueCreatorModal: React.FC<AmateurLeagueCreatorModalProps>
       id: `amateur_lga_${Date.now()}`,
       title: leagueName.trim(),
       description: description.trim() || `Liga amateur organizada por ${organizerName}. Premios en metálico con recaudación comunitaria.`,
-      bannerImage: '/src/assets/images/lol_champion_arena_1791934070563.jpg',
+      bannerImage: 'images/lol_champion_arena_1791934070563.jpg',
       tier,
       entryType: 'PAID',
       entryFeeUSD: entryFeePerTeam,

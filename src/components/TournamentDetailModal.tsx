@@ -223,7 +223,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 <div className="relative rounded-2xl bg-gradient-to-b from-[#1a1c14] to-[#0c1018] border-2 border-amber-400/70 shadow-[0_0_25px_rgba(251,191,36,0.2)] overflow-hidden flex flex-col justify-between">
                   <div className="relative h-48 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_first_1791934697118.jpg"
+                      src="images/hextech_trophy_first_1791934697118.jpg"
                       alt="Trofeo 1º Puesto Hextech Grand Championship"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
@@ -250,7 +250,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 <div className="relative rounded-2xl bg-slate-900/90 border border-slate-700 shadow-[0_0_20px_rgba(10,200,185,0.15)] overflow-hidden flex flex-col justify-between">
                   <div className="relative h-48 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_second_1791934697670.jpg"
+                      src="images/hextech_trophy_second_1791934697670.jpg"
                       alt="Trofeo 2º Puesto Hextech Runner-Up"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
@@ -277,7 +277,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 <div className="relative rounded-2xl bg-slate-900/90 border border-amber-900/50 shadow-[0_0_20px_rgba(217,119,6,0.15)] overflow-hidden flex flex-col justify-between">
                   <div className="relative h-48 w-full bg-black/60 overflow-hidden">
                     <img
-                      src="/src/assets/images/hextech_trophy_third_1791934697357.jpg"
+                      src="images/hextech_trophy_third_1791934697357.jpg"
                       alt="Trofeo 3º Puesto Hextech Bronze"
                       className="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"

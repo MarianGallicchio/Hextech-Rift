@@ -52,7 +52,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
       id: `trn_${Date.now()}`,
       title: title.trim(),
       description: description.trim() || 'Torneo competitivo oficial con validación automatizada de resultados.',
-      bannerImage: '/src/assets/images/lol_champion_arena_1791934070563.jpg',
+      bannerImage: 'images/lol_champion_arena_1791934070563.jpg',
       tier,
       entryType,
       entryFeeUSD: entryType === 'FREE' ? 0 : entryFeeUSD,
