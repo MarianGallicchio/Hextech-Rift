@@ -1,4 +1,4 @@
-import { Match, MatchStats, ServerRegion } from '../types/tournament';
+import { Match, MatchStats, RiotMatchHistoryEntry, ServerRegion } from '../types/tournament';
 
 export interface RiotAccountDto {
   puuid: string;
@@ -210,6 +210,82 @@ class RiotApiService {
         hotStreak: true
       }
     };
+  }
+
+  /**
+   * Recent ranked history via match-v5 (through the local proxy).
+   * Returns null when the proxy is offline so callers keep mock data.
+   */
+  public async getRecentMatches(
+    puuid: string,
+    region: ServerRegion,
+    count: number = 8
+  ): Promise<RiotMatchHistoryEntry[] | null> {
+    const base = this.proxyBase();
+    if (!base || !puuid) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(
+        `${base}/api/riot/matches?puuid=${encodeURIComponent(puuid)}` +
+        `&region=${encodeURIComponent(region)}&count=${count}`,
+        { signal: ctrl.signal }
+      );
+      if (!res.ok) return null;
+      const json = await res.json();
+      return Array.isArray(json.matches) && json.matches.length > 0 ? json.matches : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  public async getTopMastery(
+    puuid: string,
+    region: ServerRegion
+  ): Promise<{ championName: string; championLevel: number; championPoints: number }[] | null> {
+    const base = this.proxyBase();
+    if (!base || !puuid) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(
+        `${base}/api/riot/mastery?puuid=${encodeURIComponent(puuid)}` +
+        `&region=${encodeURIComponent(region)}&count=3`,
+        { signal: ctrl.signal }
+      );
+      if (!res.ok) return null;
+      const json = await res.json();
+      return Array.isArray(json.mastery) ? json.mastery : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  public async getLiveGame(
+    puuid: string,
+    region: ServerRegion
+  ): Promise<{ inGame: boolean; gameMode?: string } | null> {
+    const base = this.proxyBase();
+    if (!base || !puuid) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(
+        `${base}/api/riot/live?puuid=${encodeURIComponent(puuid)}` +
+        `&region=${encodeURIComponent(region)}`,
+        { signal: ctrl.signal }
+      );
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

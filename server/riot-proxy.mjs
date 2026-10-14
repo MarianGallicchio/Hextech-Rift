@@ -254,3 +254,200 @@ app.post('/api/riot/codes', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`[riot-proxy] listening on http://localhost:${PORT} (live=${API_KEY.length > 5})`);
 });
+
+// POST /api/riot/setup { region?, name?, count? } — REAL one-shot flow.
+// Requires a PRODUCTION key (dev keys get 403 on tournament endpoints).
+// provider -> tournament -> codes, for a client-redeemable code.
+app.post('/api/riot/setup', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const region = String(req.body.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const name = String(req.body.name || 'Hextech Rift').slice(0, 80);
+    const count = Math.min(Math.max(Number(req.body.count || 1), 1), 100);
+
+    const providerId = await tournamentPost(platform, '/lol/tournament/v4/providers', {
+      region,
+      url: 'https://mariangallicchio.github.io/Hextech-Rift/api/tournament-callback'
+    });
+    const tournamentId = await tournamentPost(platform, '/lol/tournament/v4/tournaments', {
+      providerId,
+      name
+    });
+    const codes = await tournamentPost(
+      platform,
+      '/lol/tournament/v4/codes',
+      {
+        mapType: 'SUMMONERS_RIFT',
+        metadata: `Hextech Rift — ${name}`,
+        pickType: 'TOURNAMENT_DRAFT',
+        spectatorType: 'ALL',
+        teamSize: 5
+      },
+      `?tournamentId=${tournamentId}&count=${count}`
+    );
+    res.json({ providerId, tournamentId, codes, region, platform, stub: false });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, payload: err.payload || null });
+  }
+});
+
+// ---- Live game data APIs (work with development keys) ----
+// NOTE: match-v5 is CLUSTER-routed (americas/europe/asia); mastery,
+// spectator and status are PLATFORM-routed (la2, na1, ...).
+
+// Data Dragon champion id (numeric key) -> name, cached server-side.
+let ddragonChamps = null;
+async function championName(championId) {
+  try {
+    if (!ddragonChamps) {
+      const res = await fetch('https://ddragon.leagueoflegends.com/cdn/14.10.1/data/en_US/champion.json');
+      const json = await res.json();
+      ddragonChamps = {};
+      for (const c of Object.values(json.data)) ddragonChamps[c.key] = c.name;
+    }
+    return ddragonChamps[String(championId)] || `Champ ${championId}`;
+  } catch {
+    return `Champ ${championId}`;
+  }
+}
+
+const LANE_MAP = { TOP: 'TOP', JUNGLE: 'JUNGLE', MIDDLE: 'MID', BOTTOM: 'ADC', UTILITY: 'SUPPORT' };
+
+// GET /api/riot/matches?puuid=&region=LAS&count=8
+app.get('/api/riot/matches', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const puuid = String(req.query.puuid || '').trim();
+    if (!puuid) return res.status(400).json({ error: 'puuid is required.' });
+    const region = String(req.query.region || 'LAS').toUpperCase();
+    const cluster = CLUSTER_FOR[region] || 'americas';
+    const count = Math.min(Math.max(Number(req.query.count || 8), 1), 20);
+
+    const matches = await cached(`matches:${cluster}:${puuid}:${count}`, async () => {
+      const ids = await riotFetch(
+        `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=${count}`
+      );
+      const out = [];
+      // Sequential + cached: gentle on dev-key rate limits.
+      for (const id of ids || []) {
+        const m = await riotFetch(`https://${cluster}.api.riotgames.com/lol/match/v5/matches/${id}`);
+        if (!m || !m.info) continue;
+        const p = (m.info.participants || []).find((x) => x.puuid === puuid);
+        if (!p) continue;
+        const kda = (p.kills + p.assists) / Math.max(1, p.deaths);
+        out.push({
+          matchId: m.metadata.matchId,
+          gameDate: new Date(m.info.gameCreation).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }),
+          championName: p.championName,
+          role: LANE_MAP[p.individualPosition] || p.individualPosition || p.lane || 'FILL',
+          win: !!p.win,
+          kills: p.kills,
+          deaths: p.deaths,
+          assists: p.assists,
+          kdaRatio: Math.round(kda * 10) / 10,
+          cs: (p.totalMinionsKilled || 0) + (p.neutralMinionsKilled || 0),
+          rollingWinRate: 0
+        });
+      }
+      let w = 0;
+      // Chronological order (oldest first) to match chart semantics.
+      return out.reverse().map((e, i) => {
+        if (e.win) w += 1;
+        return { ...e, rollingWinRate: Math.round((w / (i + 1)) * 100) };
+      });
+    });
+    res.json({ matches, source: 'RIOT_MATCH_V5_LIVE' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Proxy error.' });
+  }
+});
+
+// GET /api/riot/mastery?puuid=&region=LAS&count=3
+app.get('/api/riot/mastery', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const puuid = String(req.query.puuid || '').trim();
+    if (!puuid) return res.status(400).json({ error: 'puuid is required.' });
+    const region = String(req.query.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const count = Math.min(Math.max(Number(req.query.count || 3), 1), 10);
+
+    const mastery = await cached(`mastery:${platform}:${puuid}:${count}`, async () => {
+      const list = await riotFetch(
+        `https://${platform}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=${count}`
+      );
+      const out = [];
+      for (const m of list || []) {
+        out.push({
+          championId: m.championId,
+          championName: await championName(m.championId),
+          championLevel: m.championLevel,
+          championPoints: m.championPoints,
+          lastPlayTime: m.lastPlayTime
+        });
+      }
+      return out;
+    });
+    res.json({ mastery, source: 'RIOT_MASTERY_V4_LIVE' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Proxy error.' });
+  }
+});
+
+// GET /api/riot/live?puuid=&region=LAS — spectator-v5 (404 = not in game).
+app.get('/api/riot/live', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const puuid = String(req.query.puuid || '').trim();
+    if (!puuid) return res.status(400).json({ error: 'puuid is required.' });
+    const region = String(req.query.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const game = await riotFetch(
+      `https://${platform}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/${puuid}`
+    );
+    if (!game) return res.json({ inGame: false });
+    res.json({
+      inGame: true,
+      gameMode: game.gameMode,
+      gameType: game.gameType,
+      mapId: game.mapId,
+      gameLengthSec: game.gameLength,
+      queueId: game.gameQueueConfigId
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Proxy error.' });
+  }
+});
+
+// GET /api/riot/status?region=LAS — lol-status-v4 platform health.
+app.get('/api/riot/status', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(503).json({ error: 'Proxy has no RIOT_API_KEY configured.' });
+    const region = String(req.query.region || 'LAS').toUpperCase();
+    const platform = PLATFORM_FOR[region] || 'la2';
+    const st = await cached(`status:${platform}`, async () =>
+      riotFetch(`https://${platform}.api.riotgames.com/lol/status/v4/platform-data`)
+    );
+    const openIssues = [...(st.maintenances || []), ...(st.incidents || [])].filter(
+      (i) => i.incident_severity !== 'info' && (i.status === 'in_progress' || i.status === 'scheduled')
+    );
+    res.json({
+      name: st.name,
+      locales: st.locales,
+      openIssues: openIssues.map((i) => ({
+        id: i.id,
+        severity: i.incident_severity,
+        status: i.status,
+        titles: (i.titles || []).map((t) => t.content),
+        updates: (i.updates || []).slice(0, 1).map((u) => ({
+          severity: u.severity,
+          created: u.created_at,
+          body: (u.translations || [])[0]?.content || ''
+        }))
+      }))
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Proxy error.' });
+  }
+});

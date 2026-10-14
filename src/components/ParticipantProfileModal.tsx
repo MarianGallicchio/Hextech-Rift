@@ -30,6 +30,7 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
   const [selectedMainChamps, setSelectedMainChamps] = useState(player.mainChampions);
   const [verifyState, setVerifyState] = useState<'idle' | 'checking' | 'live' | 'sim'>('idle');
   const [verifyMsg, setVerifyMsg] = useState('');
+  const [verifiedPuuid, setVerifiedPuuid] = useState<string | null>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -96,6 +97,7 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
       const data = await riotApi.fetchSummonerData(summonerName.trim(), tagLine.trim(), server);
       if (riotApi.wasLastLookupLive()) {
         const entry = data.rankEntry;
+        setVerifiedPuuid(data.account.puuid);
         if ((rankTiers as string[]).includes(entry.tier) && entry.tier !== 'UNRANKED') {
           setRankTier(entry.tier as RankTier);
           if ((divisions as string[]).includes(entry.rank)) {
@@ -244,6 +246,8 @@ export const ParticipantProfileModal: React.FC<ParticipantProfileModalProps> = (
             <RiotPerformanceChart
               summonerName={player.summonerName}
               tagLine={player.tagLine}
+              puuid={verifiedPuuid ?? undefined}
+              region={server}
             />
           </div>
         ) : (

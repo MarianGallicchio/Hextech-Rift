@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -11,27 +11,72 @@ import {
   Bar,
   Legend
 } from 'recharts';
-import { RiotMatchHistoryEntry } from '../types/tournament';
+import { RiotMatchHistoryEntry, ServerRegion } from '../types/tournament';
 import { RIOT_MATCH_HISTORY_SAMPLE } from '../data/riotHistoryData';
 import { TrendingUp, Award, Swords, Flame, CheckCircle2, XCircle } from 'lucide-react';
+import { riotApi } from '../services/riotApi';
 
 interface RiotPerformanceChartProps {
   summonerName: string;
   tagLine: string;
+  /** When present (after "Verificar con Riot"), match-v5 feeds REAL history. */
+  puuid?: string;
+  region?: ServerRegion;
 }
 
 export const RiotPerformanceChart: React.FC<RiotPerformanceChartProps> = ({
   summonerName,
-  tagLine
+  tagLine,
+  puuid,
+  region
 }) => {
   const [metricView, setMetricView] = useState<'winrate' | 'kda'>('winrate');
-  const data = RIOT_MATCH_HISTORY_SAMPLE;
+  const [liveMatches, setLiveMatches] = useState<RiotMatchHistoryEntry[] | null>(null);
+  const [liveGame, setLiveGame] = useState<{ inGame: boolean; gameMode?: string } | null>(null);
+  const [mastery, setMastery] = useState<{ championName: string; championLevel: number; championPoints: number }[] | null>(null);
+
+  useEffect(() => {
+    if (!puuid || !region) return;
+    let cancelled = false;
+    riotApi.getRecentMatches(puuid, region, 10).then((m) => {
+      if (!cancelled && m) setLiveMatches(m);
+    });
+    riotApi.getLiveGame(puuid, region).then((g) => {
+      if (!cancelled && g) setLiveGame(g);
+    });
+    riotApi.getTopMastery(puuid, region).then((t) => {
+      if (!cancelled && t) setMastery(t);
+    });
+    return () => { cancelled = true; };
+  }, [puuid, region]);
+
+  const data = liveMatches ?? RIOT_MATCH_HISTORY_SAMPLE;
+  const isLive = liveMatches !== null;
 
   const totalWins = data.filter((m) => m.win).length;
-  const winRatePercent = Math.round((totalWins / data.length) * 100);
-  const avgKDA = (
+  const winRatePercent = data.length > 0 ? Math.round((totalWins / data.length) * 100) : 0;
+  const avgKDA = data.length > 0 ? (
     data.reduce((acc, m) => acc + (m.kills + m.assists) / Math.max(1, m.deaths), 0) / data.length
-  ).toFixed(1);
+  ).toFixed(1) : '0.0';
+
+  // Current streak from the most recent game backwards.
+  let streakWins = 0;
+  let streakLosses = 0;
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i].win && streakLosses === 0) streakWins += 1;
+    else if (!data[i].win && streakWins === 0) streakLosses += 1;
+    else break;
+  }
+
+  // Most-played champion in this sample + its win rate.
+  const champAgg = new Map<string, { games: number; wins: number }>();
+  data.forEach((m) => {
+    const e = champAgg.get(m.championName) ?? { games: 0, wins: 0 };
+    e.games += 1;
+    if (m.win) e.wins += 1;
+    champAgg.set(m.championName, e);
+  });
+  const mainChamp = [...champAgg.entries()].sort((a, b) => b[1].games - a[1].games)[0];
 
   // Custom Hextech Tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -79,10 +124,16 @@ export const RiotPerformanceChart: React.FC<RiotPerformanceChartProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-[#0ac8b9]/20 border border-[#0ac8b9]/40 text-[#0ac8b9]">
-              RIOT GAMES API MATCH-V5
+            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+              isLive
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                : 'bg-[#0ac8b9]/20 border-[#0ac8b9]/40 text-[#0ac8b9]'
+            }`}>
+              {isLive ? 'MATCH-V5 EN VIVO' : 'RIOT GAMES API MATCH-V5'}
             </span>
-            <span className="text-xs font-mono text-slate-400">Últimas 10 Partidas</span>
+            <span className="text-xs font-mono text-slate-400">
+              Últimas {data.length} Partidas {isLive ? 'reales' : '(simulador)'}
+            </span>
           </div>
           <h3 className="text-base font-cinzel font-bold text-[#f0e6d2] flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-[#c89b3c]" />
@@ -149,17 +200,37 @@ export const RiotPerformanceChart: React.FC<RiotPerformanceChartProps> = ({
               </span>
             ))}
           </div>
-          <span className="text-[10px] text-emerald-400 block mt-1">4 victorias seguidas</span>
+          <span className="text-[10px] text-emerald-400 block mt-1">
+            {streakWins > 0 ? `${streakWins} victoria${streakWins > 1 ? 's' : ''} seguida${streakWins > 1 ? 's' : ''}` : streakLosses > 0 ? `${streakLosses} derrota${streakLosses > 1 ? 's' : ''} seguida${streakLosses > 1 ? 's' : ''}` : 'Sin racha'}
+          </span>
         </div>
 
         <div className="p-3 rounded-xl bg-black/50 border border-slate-800">
           <span className="text-slate-400 block text-[10px] uppercase">Campeón Principal</span>
           <span className="text-sm font-bold text-[#f0e6d2] block truncate">
-            Ahri (4 partidas)
+            {mainChamp ? `${mainChamp[0]} (${mainChamp[1].games} partida${mainChamp[1].games > 1 ? 's' : ''})` : '—'}
           </span>
-          <span className="text-[10px] text-amber-400 block mt-0.5">100% Win Rate</span>
+          <span className="text-[10px] text-amber-400 block mt-0.5">
+            {mainChamp ? `${Math.round((mainChamp[1].wins / mainChamp[1].games) * 100)}% Win Rate` : ''}
+          </span>
         </div>
       </div>
+
+      {(liveGame?.inGame || (mastery && mastery.length > 0)) && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+          {liveGame?.inGame && (
+            <span className="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              EN PARTIDA AHORA{liveGame.gameMode ? ` · ${liveGame.gameMode}` : ''}
+            </span>
+          )}
+          {mastery && mastery.length > 0 && (
+            <span className="px-2 py-1 rounded-lg bg-black/50 border border-slate-800 text-slate-300">
+              Maestrías: {mastery.map((m) => `${m.championName} Nv.${m.championLevel}`).join(' · ')}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Recharts Canvas */}
       <div className="h-56 w-full pt-2">
