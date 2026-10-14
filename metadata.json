@@ -1,0 +1,6 @@
+{
+  "name": "Hextech Rift - Torneos League of Legends",
+  "description": "Plataforma competitiva y de gestión de torneos de League of Legends con brackets automatizados, salas de juego, control de equipos, divisiones clasificatorias y premios en metálico.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
